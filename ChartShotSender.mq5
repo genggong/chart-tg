@@ -13,7 +13,7 @@
 #property description "Screenshot chart -> Telegram tiap N menit via endpoint PHP."
 
 input int    everyMinutes = 15;     // Interval screenshot (menit)
-input string shotFilename = "chart_shot.png"; // Nama file di MQL5\Files\
+input string shotFilename = "";     // Kosong = auto "chart_<SYMBOL>_<TF>.png" (unik per pair)
 input int    shotWidth    = 1280;   // Lebar gambar px
 input int    shotHeight   = 720;    // Tinggi gambar px
 input bool   shotOnInit   = true;   // Screenshot langsung saat dipasang
@@ -148,12 +148,20 @@ bool SendPng(string file, string caption)
    return true;
 }
 
+//--- Nama file otomatis unik per pair+TF (anti-tabrakan saat multi pair)
+string ShotAutoName()
+{
+   string sym = _Symbol;
+   StringReplace(sym, ".", "_");   // simbol dgn titik (mis. XAUUSD.a) -> aman utk nama file
+   return StringFormat("chart_%s_%s.png", sym, TfName());
+}
+
 void TakeShot()
 {
    if(showInfo)
       UpdateInfoLabel();
 
-   string fn = (StringLen(shotFilename) > 0 ? shotFilename : "chart_shot.png");
+   string fn = (StringLen(shotFilename) > 0 ? shotFilename : ShotAutoName());
    // refresh chart dulu biar gambar terbaru
    ChartRedraw(0);
    bool ok = ChartScreenShot(0, fn, shotWidth, shotHeight, ALIGN_RIGHT);
