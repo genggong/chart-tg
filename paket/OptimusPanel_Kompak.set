@@ -1,0 +1,49 @@
+; OptimusPanel - PRESET LAYOUT KOMPAK (Konservatif)
+; Panel ringkas: kolom utama saja, ukuran kecil, hemat layar
+; Dipasang di chart M30 (EA Optimus) ATAU chart H1 (EA COPTAH)
+
+;=== Panel Layout ===
+showCandleFlow=true
+showRpsMatrix=false
+panelCorner=0
+panelX=8
+panelY=22
+fontSize=7
+rowH=13
+colW=52
+clrHeader=clrWhite
+clrUp=clrAqua
+clrDown=clrTomato
+clrNeutral=clrLightGray
+clrMoment=clrYellow
+
+;=== Candle Flow Columns (kompak) ===
+colOHLC=true
+colJika=true
+colOpPv=true
+colTrend=true
+colPivoting=true
+colTugas=false
+colMove=true
+colArea=false
+colIndex=true
+colRange=true
+colBreak=true
+colBusur=true
+colTarget=true
+colTrg=false
+colAts=false
+colSar=false
+colPola=false
+colHsh=false
+
+;=== Calculation ===
+atrPeriod=14
+atrMult=1.0
+pivotTolerancePct=0.05
+useParabolic=true
+psarStep=0.02
+psarMax=0.20
+rangeLookback=14
+hshZonePips=20.0
+momentEqPips=2.0
