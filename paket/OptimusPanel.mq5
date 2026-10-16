@@ -41,16 +41,14 @@ enum OptPeriod
    OPT_30M  = 1,   // M30
    OPT_H1   = 2,   // H1
    OPT_H4   = 3,   // H4
-   OPT_ASIA = 4,   // ZONA ASIA  (8 jam pertama sesi, H8-1)
-   OPT_EURO = 5,   // ZONA EROPA (8 jam kedua, H8-2)
-   OPT_USA  = 6,   // ZONA USA   (8 jam terakhir, H8-3)
-   OPT_D1   = 7,   // Daily
-   OPT_W1   = 8,   // Weekly
-   OPT_MN1  = 9,   // Monthly
-   OPT_QRTR = 10,  // Quarter (aggregated)
-   OPT_SMTR = 11,  // Semester (aggregated)
-   OPT_YEAR = 12,  // Yearly (aggregated)
-   OPT_COUNT = 13
+   OPT_H8   = 4,   // 8-HOUR (blok 8 jam; dulu ASIA/EURO/MARKET digabung)
+   OPT_D1   = 5,   // Daily
+   OPT_W1   = 6,   // Weekly
+   OPT_MN1  = 7,   // Monthly
+   OPT_QRTR = 8,   // Quarter (aggregated)
+   OPT_SMTR = 9,   // Semester (aggregated)
+   OPT_YEAR = 10,  // Yearly (aggregated)
+   OPT_COUNT = 11
   };
 
 //--- RPS level set ---------------------------------------------------
@@ -284,29 +282,28 @@ string g_pfx  = "OP_";
 int    g_colN = 0;
 string g_colT[40];
 int    g_colW[40];
-int    g_sarHandle[13];   // native-TF SAR handles (aggregated = INVALID_HANDLE)
-int    g_atrHandle[13];   // native-TF ATR handles (aggregated QRTR/SMTR/YEAR = proxy D1)
-bool   g_aggAtr[13];      // true = periode agregat (ATR proxy dari D1)
+int    g_sarHandle[11];   // native-TF SAR handles (aggregated = INVALID_HANDLE)
+int    g_atrHandle[11];   // native-TF ATR handles (aggregated QRTR/SMTR/YEAR = proxy D1)
+bool   g_aggAtr[11];      // true = periode agregat (ATR proxy dari D1)
 double g_dummy[];         // buffer dummy utk memaksa sub-window (selalu EMPTY)
 double g_panelSig[];      // [1] sinyal konsensus panel: +1 bullish / -1 bearish / 0 netral (utk EA)
 double g_momentSig[];     // [2] sinyal MOMENT panel: +1 (↑) / -1 (↓) / 0 (utk EA)
 int    g_win    = 0;      // index sub-window indicator (bukan chart utama)
 
-//--- Period table (order: M15..YEARLY, sesi dipisah jd 3 zona: ASIA/EROPA/USA) ----
-OptPeriod g_periods[13];
+//--- Period table (order: M15..YEARLY, sesi digabung jadi 8-HOUR) ----
+OptPeriod g_periods[11];
 
 void PeriodOrder()
   {
    g_periods[ 0] = OPT_15M;  g_periods[ 1] = OPT_30M;  g_periods[ 2] = OPT_H1;
-   g_periods[ 3] = OPT_H4;   g_periods[ 4] = OPT_ASIA; g_periods[ 5] = OPT_EURO;
-   g_periods[ 6] = OPT_USA;  g_periods[ 7] = OPT_D1;   g_periods[ 8] = OPT_W1;
-   g_periods[ 9] = OPT_MN1;  g_periods[10] = OPT_QRTR; g_periods[11] = OPT_SMTR;
-   g_periods[12] = OPT_YEAR;
+   g_periods[ 3] = OPT_H4;   g_periods[ 4] = OPT_H8;   g_periods[ 5] = OPT_D1;
+   g_periods[ 6] = OPT_W1;   g_periods[ 7] = OPT_MN1;  g_periods[ 8] = OPT_QRTR;
+   g_periods[ 9] = OPT_SMTR; g_periods[10] = OPT_YEAR;
   }
 
 int PeriodIndex(OptPeriod p)
   {
-   for(int i = 0; i < OPT_COUNT; i++)
+   for(int i = 0; i < 11; i++)
       if(g_periods[i] == p) return i;
    return -1;
   }
@@ -319,9 +316,7 @@ string PeriodName(OptPeriod p)
             case OPT_30M:  return "30-M";
             case OPT_H1:   return "1-HOUR";
             case OPT_H4:   return "4-HOUR";
-            case OPT_ASIA: return "ASIA";
-            case OPT_EURO: return "EROPA";
-            case OPT_USA:  return "USA";
+            case OPT_H8:   return "8-HOUR";
             case OPT_D1:   return "DAILY";
             case OPT_W1:   return "WEEKLY";
             case OPT_MN1:  return "MONTH";
@@ -332,6 +327,27 @@ string PeriodName(OptPeriod p)
         return "?";
         }
 
+//--- Nama ZONA utk baris H8: mengikuti jam server saat candle H8 dibuka ----
+//   Candles H8 standar: 00-08 = ASIA, 08-16 = EROPA, 16-24 = USA.
+//   Setiap pergantian candle H8, nama ikut berganti (angka & nama sinkron).
+string H8ZoneName()
+  {
+   datetime t8  = iTime(_Symbol, PERIOD_H8, 0);
+   if(t8 <= 0) t8 = TimeCurrent();
+   MqlDateTime d;
+   TimeToStruct(t8 + sessOffsetHours * 3600, d);
+   int h = d.hour;
+   if(h >= 0  && h < 8)  return "ASIA";
+   if(h >= 8  && h < 16) return "EROPA";
+   return "USA";
+  }
+// Label baris: H8 -> nama zona aktif; period lain -> nama standar
+string PeriodRowName(OptPeriod p)
+  {
+   if(p == OPT_H8) return H8ZoneName();
+   return PeriodName(p);
+  }
+
 //--- Native TF mapping for a period --------------------------------------
 ENUM_TIMEFRAMES BarTf(OptPeriod p)
   {
@@ -341,8 +357,7 @@ ENUM_TIMEFRAMES BarTf(OptPeriod p)
       case OPT_30M:  return PERIOD_M30;
       case OPT_H1:   return PERIOD_H1;
       case OPT_H4:   return PERIOD_H4;
-      case OPT_ASIA: case OPT_EURO: case OPT_USA:
-                    return PERIOD_H1;      // zona: agregat 8 jam dari H1
+      case OPT_H8:   return PERIOD_H8;
       case OPT_D1:   return PERIOD_D1;
       case OPT_W1:   return PERIOD_W1;
       case OPT_MN1:  return PERIOD_MN1;
@@ -450,97 +465,16 @@ bool AggregateWindow(string sym, datetime start, datetime end, bool live, Candle
         }
      }
    out.valid = !first;
-     return out.valid;
-    }
+   return out.valid;
+  }
 
-   //--- Zona 8-jam: jam awal tiap zona (ASIA 00, EROPA 08, USA 16) ----------
-   int ZoneStartHour(OptPeriod p)
-     {
-      switch(p)
-        {
-         case OPT_ASIA: return 0;
-         case OPT_EURO: return 8;
-         case OPT_USA:  return 16;
-         default:       return 0;
-        }
-     }
-
-   //--- Zona aktif saat ini (berdasar jam server + offset sesi) -------------
-   OptPeriod CurrentZone()
-     {
-      MqlDateTime dt;
-      TimeToStruct(TimeCurrent() + sessOffsetHours * 3600, dt);
-      int h = dt.hour;
-      if(h >= 0  && h < 8)  return OPT_ASIA;
-      if(h >= 8  && h < 16) return OPT_EURO;
-      return OPT_USA;
-     }
-
-   //--- Agregasi bar H1 dalam window zona 8-jam (live = sertakan bar 0) ------
-   bool AggregateZone(string sym, datetime start, datetime end, bool live, CandleBar &out)
-     {
-      out.valid = false;
-      int total = Bars(sym, PERIOD_H1);
-      if(total < 2) return false;
-
-      bool first = true;
-      for(int s = 1; s < total; s++)
-        {
-         datetime t = iTime(sym, PERIOD_H1, s);
-         if(t < start) break;
-         if(t >= start && t < end)
-           {
-            if(first)
-              {
-               out.high  = iHigh (sym, PERIOD_H1, s);
-               out.low   = iLow  (sym, PERIOD_H1, s);
-               out.close = iClose(sym, PERIOD_H1, s);
-               first = false;
-              }
-            else
-              {
-               out.high  = MathMax(out.high, iHigh (sym, PERIOD_H1, s));
-               out.low   = MathMin(out.low,  iLow  (sym, PERIOD_H1, s));
-               out.close = iClose(sym, PERIOD_H1, s);
-              }
-            // OPEN ZONA = open bar PERTAMA (paling TUA) dalam window zona
-            out.open = iOpen(sym, PERIOD_H1, s);
-            out.time = t;
-           }
-        }
-      if(live)
-        {
-         datetime t0 = iTime(sym, PERIOD_H1, 0);
-         if(t0 >= start && t0 < end)
-           {
-            if(first)
-              {
-               out.open  = iOpen (sym, PERIOD_H1, 0);
-               out.high  = iHigh (sym, PERIOD_H1, 0);
-               out.low   = iLow  (sym, PERIOD_H1, 0);
-               out.close = iClose(sym, PERIOD_H1, 0);
-              }
-            else
-              {
-               out.high  = MathMax(out.high, iHigh(sym, PERIOD_H1, 0));
-               out.low   = MathMin(out.low,  iLow (sym, PERIOD_H1, 0));
-               out.close = iClose(sym, PERIOD_H1, 0);
-              }
-            out.time  = t0;
-            first     = false;
-           }
-        }
-      out.valid = !first;
-      return out.valid;
-     }
-
-   //--- Resolve now/prev bars for any period ---------------------------------
+//--- Resolve now/prev bars for any period ---------------------------------
 bool PeriodBars(OptPeriod p, CandleBar &now, CandleBar &prev)
   {
    string sym = _Symbol;
    datetime cur = TimeCurrent();
    datetime startN = 0, endN = 0, startP = 0, endP = 0;
-   bool useD1 = true, useZone = false;
+   bool useD1 = true;
 
    switch(p)
      {
@@ -548,22 +482,9 @@ bool PeriodBars(OptPeriod p, CandleBar &now, CandleBar &prev)
       case OPT_30M:
       case OPT_H1:
       case OPT_H4:
+      case OPT_H8:
       case OPT_D1:
          useD1 = false;
-         break;
-      case OPT_ASIA:
-      case OPT_EURO:
-      case OPT_USA:
-         {
-          // ZONA 8-JAM: ASIA 00-08, EROPA 08-16, USA 16-24 (jam server, dgn offset sesi)
-          int zs = ZoneStartHour(p);
-          datetime dayN = DayStart(cur) + (datetime)(sessOffsetHours * 3600);
-          startN = dayN + (datetime)(zs * 3600);
-          endN   = startN + 8 * 3600;
-          startP = startN - 86400;
-          endP   = endN - 86400;
-          useZone = true;
-         }
          break;
       case OPT_W1:
          startP = WeekStart(cur - 86400 * 7); endP = WeekStart(cur);
@@ -588,12 +509,6 @@ bool PeriodBars(OptPeriod p, CandleBar &now, CandleBar &prev)
      }
 
    bool okN, okP;
-   if(useZone)
-     {
-      okN = AggregateZone(sym, startN, endN, true,  now);
-      okP = AggregateZone(sym, startP, endP, false, prev);
-      return okN && okP;
-     }
    if(useD1)
      {
       okN = AggregateWindow(sym, startN, endN, true,  now);
@@ -813,9 +728,7 @@ color TfColor(OptPeriod p)
       case OPT_30M:  return clrCyan;
       case OPT_H1:   return clrTurquoise;
       case OPT_H4:   return clrLime;
-      case OPT_ASIA: return clrYellow;   // zona Asia: kuning
-      case OPT_EURO: return clrGold;     // zona Eropa: emas
-      case OPT_USA:  return clrOrange;   // zona USA: oranye
+      case OPT_H8:   return clrYellow;
       case OPT_D1:   return clrOrange;
       case OPT_W1:   return clrMagenta;
       case OPT_MN1:  return clrViolet;
@@ -917,8 +830,7 @@ string TugasLabel(OptPeriod p, int jika, double price, double pivot)
       // UP: PERTANDA cari support; PENGERJA/PENENTU kejar HI
       if(p == OPT_15M || p == OPT_30M)
          return (price < pivot) ? "PT BUSUR" : "PT TARGET";
-      if(p == OPT_H1 || p == OPT_H4 ||
-         p == OPT_ASIA || p == OPT_EURO || p == OPT_USA)
+      if(p == OPT_H1 || p == OPT_H4 || p == OPT_H8)
          return (price < pivot) ? "PJ BUSUR" : "PJ TARGET";
       return (price < pivot) ? "PN BUSUR" : "PN TARGET";
      }
@@ -926,8 +838,7 @@ string TugasLabel(OptPeriod p, int jika, double price, double pivot)
      {
       if(p == OPT_15M || p == OPT_30M)
          return (price < pivot) ? "PT TARGET" : "PT BUSUR";
-      if(p == OPT_H1 || p == OPT_H4 ||
-         p == OPT_ASIA || p == OPT_EURO || p == OPT_USA)
+      if(p == OPT_H1 || p == OPT_H4 || p == OPT_H8)
          return (price < pivot) ? "PJ TARGET" : "PJ BUSUR";
       return (price < pivot) ? "PN TARGET" : "PN BUSUR";
      }
@@ -1134,9 +1045,7 @@ string ShortTfName(OptPeriod p)
       case OPT_30M:  return "30M";
       case OPT_H1:   return "H1";
       case OPT_H4:   return "H4";
-      case OPT_ASIA: return "ASIA";
-      case OPT_EURO: return "EURO";
-      case OPT_USA:  return "USA";
+      case OPT_H8:   return "8H";
       case OPT_D1:   return "D1";
       case OPT_W1:   return "W1";
       case OPT_MN1:  return "MN";
@@ -1155,10 +1064,8 @@ OptPeriod MomentMate(OptPeriod p)
       case OPT_15M:  return OPT_30M;
       case OPT_30M:  return OPT_H1;
       case OPT_H1:   return OPT_H4;
-      case OPT_H4:   return OPT_ASIA;
-      case OPT_ASIA: return OPT_EURO;
-      case OPT_EURO: return OPT_USA;
-      case OPT_USA:  return OPT_D1;
+      case OPT_H4:   return OPT_H8;
+      case OPT_H8:   return OPT_D1;
       case OPT_D1:   return OPT_W1;
       case OPT_W1:   return OPT_MN1;
       case OPT_MN1:  return OPT_QRTR;
@@ -1384,7 +1291,7 @@ OptPeriod ChartOptPeriod()
       case PERIOD_M30: return OPT_30M;
       case PERIOD_H1:  return OPT_H1;
       case PERIOD_H4:  return OPT_H4;
-      case PERIOD_H8:  return CurrentZone();
+      case PERIOD_H8:  return OPT_H8;
       case PERIOD_D1:  return OPT_D1;
       case PERIOD_W1:  return OPT_W1;
       case PERIOD_MN1: return OPT_MN1;
@@ -1400,7 +1307,7 @@ OptPeriod ChartSpion()
       case PERIOD_M5:  return OPT_30M;   // M5  -> M30  (sesuai permintaan)
       case PERIOD_M15: return OPT_H1;    // M15 -> H1
       case PERIOD_M30: return OPT_H4;    // M30 -> H4
-      case PERIOD_H1:  return CurrentZone();   // H1  -> zona 8-jam aktif
+      case PERIOD_H1:  return OPT_H8;    // H1  -> 8H
       case PERIOD_H4:  return OPT_D1;    // H4  -> D1
       case PERIOD_H8:  return OPT_W1;    // 8H  -> W1
       case PERIOD_D1:  return OPT_MN1;   // D1  -> MN1
@@ -1415,11 +1322,9 @@ OptPeriod ChartHtf(OptPeriod base)
      {
       case OPT_15M:  return OPT_H1;    // 15M -> H1
       case OPT_30M:  return OPT_H4;    // 30M -> H4
-      case OPT_H1:   return CurrentZone();   // H1  -> zona 8-jam aktif
+      case OPT_H1:   return OPT_H8;    // H1  -> 8H
       case OPT_H4:   return OPT_D1;    // H4  -> D1
-      case OPT_ASIA:
-      case OPT_EURO:
-      case OPT_USA:  return OPT_D1;    // zona -> D1
+      case OPT_H8:   return OPT_W1;    // 8H  -> W1
       case OPT_D1:   return OPT_MN1;   // D1  -> MN1
       case OPT_W1:   return OPT_MN1;   // W1  -> MN1
       default:       return OPT_H4;
@@ -1658,7 +1563,7 @@ void DrawPanel()
       int       x2 = panelX;
       int       c  = 0;
 
-      SetLabel("r"+IntegerToString(r)+"c"+IntegerToString(c++), PeriodName(p), x2, y,
+      SetLabel("r"+IntegerToString(r)+"c"+IntegerToString(c++), PeriodRowName(p), x2, y,
                (ia < 0) ? clrNeutral : TfColor(p), fontSize);
       x2 += g_colW[0];
 
@@ -1819,6 +1724,7 @@ void DrawPanel()
 //    label di slot TF (lebarnya 70 seperti "RPS"), tiap sel maju colW
    if(showMomentRow)
      {
+      y += 6;                          // jarak ekstra dr kolom di atas (tidak mepet)
       int x3 = panelX;
       SetLabel("mom_tf", "MOMENT", x3, y, clrHeader, fontSize); x3 += 70;
       for(int r = 0; r < OPT_COUNT; r++)
@@ -1847,7 +1753,7 @@ void DrawPanel()
         {
          // Panah arah TF pakai font Segoe UI Symbol (glyph ↑↓→ PASTI ada di Win7),
          // biar tidak tampil sebagai kotak/□.
-         string tfLabel = PeriodName(g_periods[t]) + " " + TfArrow(g_periods[t]);
+         string tfLabel = PeriodRowName(g_periods[t]) + " " + TfArrow(g_periods[t]);
          SetLabel("rps_h_tf"+IntegerToString(t), tfLabel, x4, y, TfColor(g_periods[t]), rpsFont, "Segoe UI Symbol");
          x4 += colW;
         }
