@@ -18,15 +18,17 @@ input int    shotWidth    = 1280;   // Lebar gambar px
 input int    shotHeight   = 720;    // Tinggi gambar px
 input bool   shotOnInit   = true;   // Screenshot langsung saat dipasang
 input bool   showInfo     = true;   // Label info simbol & waktu di gambar
+input bool   ignoreMarketClose = false; // true = tetap kirim SC walau broker bilang pasar tutup (crypto yg tak punya info sesi)
 input bool   webSend      = true;   // Kirim via WebRequest
 input string webUrl       = "https://vapekongstore.com/tg_shot/send.php";
 input string webKey       = "KGSd2825161d5eacbae1ef6beb8"; // Secret send.php
-input string webChat      = "";     // Kosong = channel bawaan di send.php
+input string webChat      = "-1001583828319"; // Group default: kirim lgsg ke group tanpa isi parameter
 input int    webTimeout   = 10000;  // ms
 
 const string c_label = "_ChartShotSender_info";
 int g_lastShot = 0;
 int g_lastCleanup = 0;
+int g_lastBoundary = 0;   // boundary 15-menit terakhir yang sudah di-shoot (sejajar jam)
 
 //+------------------------------------------------------------------+
 //| Helper                                                            |
@@ -48,6 +50,13 @@ string TfName()
    }
 }
 
+//--- Jam dunia GMT nyata (dari jam lokal PC + offset GMT, bukan jam server broker)
+string WorldTimeStr()
+{
+   datetime gmt = TimeLocal() - TimeGMTOffset();
+   return TimeToString(gmt, TIME_DATE | TIME_SECONDS);
+}
+
 void UpdateInfoLabel()
 {
    if(ObjectFind(0, c_label) < 0)
@@ -62,9 +71,10 @@ void UpdateInfoLabel()
       ObjectSetString(0, c_label, OBJPROP_FONT, "Arial");
       ObjectSetInteger(0, c_label, OBJPROP_FONTSIZE, 11);
    }
+   MqlDateTime st; TimeToStruct(TimeCurrent(), st);
    ObjectSetString(0, c_label, OBJPROP_TEXT,
-      StringFormat("%s %s | %s", _Symbol, TfName(),
-                   TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS)));
+      StringFormat("%s %s | %s GMT | SVR %02d:%02d", _Symbol, TfName(),
+                   WorldTimeStr(), st.hour, st.min));
 }
 
 string JsonEscape(string s)
@@ -174,8 +184,9 @@ void TakeShot()
    PrintFormat("[ChartShotSender] Screenshot OK -> MQL5\\Files\\%s", fn);
    if(webSend)
    {
-      string caption = StringFormat("%s %s | %s", _Symbol, TfName(),
-                                    TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS));
+      MqlDateTime cst; TimeToStruct(TimeCurrent(), cst);
+      string caption = StringFormat("%s %s | %s GMT | SVR %02d:%02d", _Symbol, TfName(),
+                                    WorldTimeStr(), cst.hour, cst.min);
       SendPng(fn, caption);
    }
 }
@@ -187,6 +198,8 @@ int OnInit()
 {
    EventSetTimer(60);
    g_lastShot = 0;
+   g_lastCleanup = 0;
+   g_lastBoundary = (int)(TimeCurrent() / (everyMinutes * 60)) * (everyMinutes * 60);
    if(shotOnInit)
       TakeShot();
    return INIT_SUCCEEDED;
@@ -202,27 +215,51 @@ void OnDeinit(const int reason)
 void OnTimer()
 {
    datetime now = TimeCurrent();
-   if(IsWeekend())
+   if(!ignoreMarketClose && IsMarketClosed())
    {
-      // Market tutup: kirim ping trigger biar endpoint bersihkan foto lama (sekali per interval)
+      // Pasar tutup MENURUT BROKER (XAUUSD/forex weekend; BTC biasanya buka):
+      // kirim ping trigger biar endpoint bersihkan foto lama (sekali per interval)
       if((int)now - g_lastCleanup >= everyMinutes * 60)
       {
+         MqlDateTime td; TimeToStruct(now, td);
+         PrintFormat("[ChartShotSender] %s: pasar tutup menurut broker (hari %d, 0=Minggu..6=Sabtu) — SC dilewati, kirim cleanup ping",
+                     _Symbol, td.day_of_week);
          SendCleanupPing();
          g_lastCleanup = (int)now;
       }
       g_lastShot = (int)now; // jangan screenshot selama libur
       return;
    }
-   if((int)now - g_lastShot >= everyMinutes * 60)
+   // Kirim SELARAS JAM: boundary = kelipatan 15 menit dari jam server (:00, :15, :30, :45).
+   // pindah boundary terakhir, baru shoot — mencegah dobel di tick yang sama.
+   int step = everyMinutes * 60;
+   int boundary = (int)(now / step) * step;
+   if(boundary != g_lastBoundary && now >= boundary)
    {
       TakeShot();
+      g_lastBoundary = boundary;
       g_lastShot = (int)now;
    }
 }
 
 void OnTick() {}
 
-//--- true saat Sabtu/Minggu (waktu server broker) — market forex tutup
+//--- true saat pasar tutup MENURUT BROKER (sadar crypto 24/7):
+//    cek SESI TRADE hari ini; kalau broker tak punya info sesi -> fallback Sabtu/Minggu.
+//    (Dulu: Sabtu/Minggu selalu dianggap libur -> BTC/ETH yang jalan hari Sabtu
+//     jadi tidak pernah dikirim SC-nya.)
+bool IsMarketClosed()
+{
+   MqlDateTime t;
+   TimeToStruct(TimeCurrent(), t);
+   ENUM_DAY_OF_WEEK dow = (ENUM_DAY_OF_WEEK)t.day_of_week;
+   datetime from, to;
+   if(SymbolInfoSessionTrade(_Symbol, dow, 0, from, to)) return false;   // ada sesi hari ini -> BUKA
+   if(SymbolInfoSessionTrade(_Symbol, dow, 1, from, to)) return false;   // sesi ke-2
+   return (t.day_of_week == 6 || t.day_of_week == 0);                    // fallback: Sabtu/Minggu
+}
+
+//--- true saat Sabtu/Minggu (waktu server broker) — hanya dipakai sbg fallback
 bool IsWeekend()
 {
    MqlDateTime t;
