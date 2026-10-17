@@ -9,7 +9,7 @@
 //|   - Upload tg_shot/send.php ke hosting, set $SECRET & token bot  |
 //+------------------------------------------------------------------+
 #property copyright "Ndes"
-#property version   "1.02"
+#property version   "1.03"
 #property description "Screenshot chart -> Telegram tiap N menit via endpoint PHP."
 
 input int    everyMinutes = 15;     // Interval screenshot (menit)
@@ -133,8 +133,8 @@ bool SendPng(string file, string caption)
    FileClose(h);
 
    string b64 = Base64Encode(img);
-   string json = StringFormat("{\"key\":\"%s\",\"chat\":\"%s\",\"caption\":\"%s\",\"img\":\"%s\"}",
-                              JsonEscape(webKey), JsonEscape(webChat),
+   string json = StringFormat("{\"key\":\"%s\",\"chat\":\"%s\",\"sym\":\"%s\",\"caption\":\"%s\",\"img\":\"%s\"}",
+                              JsonEscape(webKey), JsonEscape(webChat), JsonEscape(_Symbol),
                               JsonEscape(caption), b64);
 
    uchar body[];

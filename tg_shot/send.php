@@ -32,12 +32,18 @@ function is_weekend(): bool
     return $d >= 6;
 }
 
+/** Simbol yang jalan 24/7 (crypto) — TETAP dikirim walau Sabtu/Minggu. */
+function is_crypto_symbol(string $s): bool
+{
+    return (bool)preg_match('/BTC|ETH|SOL|XRP|ADA|DOGE|LTC|BNB|AVAX|DOT|TRX|MATIC|TON|SHIB|PEPE|USDT|BCH|LINK|XLM|ATOM|NEAR|CRYPTO/i', $s);
+}
+
 /** Hapus semua pesan screenshot yang tercatat di sent.log (dipakai cleanup.php & auto weekend). */
 function cleanup_all(): array
 {
-    $deleted = 0; $failed = 0; $total = 0;
+    $deleted = 0; $failed = 0; $total = 0; $dropped = 0;
     if (!is_file(LOG_FILE)) {
-        return ['deleted' => 0, 'failed' => 0, 'total' => 0];
+        return ['deleted' => 0, 'failed' => 0, 'total' => 0, 'dropped' => 0];
     }
     $lines = file(LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     $keep = [];
@@ -45,6 +51,9 @@ function cleanup_all(): array
         $parts = explode('|', $ln);
         if (count($parts) < 2) { $keep[] = $ln; continue; }
         $chatId = $parts[0]; $msgId = (int)$parts[1];
+        $ts = (int)($parts[2] ?? 0);
+        // Telegram MENOLAK hapus pesan lebih tua dari 48 jam -> buang dari log tanpa panggilan API
+        if ($ts > 0 && $ts < time() - 48 * 3600) { $dropped++; continue; }
         $total++;
         $ch = curl_init('https://api.telegram.org/bot' . TG_BOT_TOKEN . '/deleteMessage');
         curl_setopt_array($ch, [
@@ -59,7 +68,7 @@ function cleanup_all(): array
         if (($r['ok'] ?? false) === true) { $deleted++; } else { $failed++; $keep[] = $ln; }
     }
     @file_put_contents(LOG_FILE, implode(PHP_EOL, $keep) . (empty($keep) ? '' : PHP_EOL));
-    return ['deleted' => $deleted, 'failed' => $failed, 'total' => $total];
+    return ['deleted' => $deleted, 'failed' => $failed, 'total' => $total, 'dropped' => $dropped];
 }
 
 // ---------- route: cleanup.php bisa diakses langsung ----------
@@ -79,12 +88,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     respond(405, 'Metode harus POST');
 }
 
-// ---------- auto-cleanup saat weekend (market off) ----------
-if (is_weekend()) {
-    $res = cleanup_all();
-    respond(200, 'Market libur (Sabtu/Minggu) — pesan lama dibersihkan, kirim baru dilewati.', $res);
-}
-
 $raw = file_get_contents('php://input');
 if ($raw === false || $raw === '') {
     respond(400, 'Body kosong');
@@ -96,6 +99,16 @@ if (!is_array($data)) {
 
 if (($data['key'] ?? '') !== SECRET_KEY) {
     respond(403, 'Kunci salah');
+}
+
+// ---------- weekend: forex & logam libur, CRYPTO (24/7) TETAP dikirim ----------
+// Simbol dibaca dari field "sym" (EA v1.03+) atau dari caption ("BTCUSD H1 | ... GMT | SVR ..").
+// Dulu blok ini jalan SEBELUM cek kunci & tanpa lihat simbol -> SC Bitcoin hari Sabtu
+// ikut dibuang padahal pasar crypto jalan.
+$symHint = (string)($data['sym'] ?? '') . ' ' . (string)($data['caption'] ?? '');
+if (is_weekend() && !is_crypto_symbol($symHint)) {
+    $res = cleanup_all();
+    respond(200, 'Market libur (Sabtu/Minggu): forex & logam tutup — pesan lama dibersihkan, kirim baru dilewati. (Simbol crypto tetap dikirim.)', $res);
 }
 
 $imgB64 = (string)($data['img'] ?? '');
