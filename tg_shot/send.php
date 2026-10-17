@@ -47,9 +47,11 @@ function cleanup_all(): array
     }
     $lines = file(LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     $keep = [];
+    $maxDel = 20;   // batasi percobaan hapus per request: respons tetap cepat (< webTimeout EA 10 dtk)
     foreach ($lines as $ln) {
         $parts = explode('|', $ln);
         if (count($parts) < 2) { $keep[] = $ln; continue; }
+        if ($total >= $maxDel) { $keep[] = $ln; continue; }   // sisanya dicoba di request berikutnya
         $chatId = $parts[0]; $msgId = (int)$parts[1];
         $ts = (int)($parts[2] ?? 0);
         // Telegram MENOLAK hapus pesan lebih tua dari 48 jam -> buang dari log tanpa panggilan API
@@ -65,7 +67,12 @@ function cleanup_all(): array
         $resp = curl_exec($ch);
         curl_close($ch);
         $r = json_decode((string)$resp, true);
-        if (($r['ok'] ?? false) === true) { $deleted++; } else { $failed++; $keep[] = $ln; }
+        if (($r['ok'] ?? false) === true) { $deleted++; }
+        // error 400 = PERMANEN (pesan tak ditemukan / tak bisa dihapus krn >48 jam)
+        // -> buang dari log, jangan diulang tiap request (dulu: failed:62 terus-menerus
+        //    bikin respons >10 dtk & EA melapor WebRequest timeout padahal normal)
+        elseif (($r['error_code'] ?? 0) === 400) { $dropped++; }
+        else { $failed++; $keep[] = $ln; }
     }
     @file_put_contents(LOG_FILE, implode(PHP_EOL, $keep) . (empty($keep) ? '' : PHP_EOL));
     return ['deleted' => $deleted, 'failed' => $failed, 'total' => $total, 'dropped' => $dropped];
