@@ -9,7 +9,7 @@
 //|   - Upload tg_shot/send.php ke hosting, set $SECRET & token bot  |
 //+------------------------------------------------------------------+
 #property copyright "Ndes"
-#property version   "1.01"
+#property version   "1.02"
 #property description "Screenshot chart -> Telegram tiap N menit via endpoint PHP."
 
 input int    everyMinutes = 15;     // Interval screenshot (menit)
@@ -29,6 +29,7 @@ const string c_label = "_ChartShotSender_info";
 int g_lastShot = 0;
 int g_lastCleanup = 0;
 int g_lastBoundary = 0;   // boundary 15-menit terakhir yang sudah di-shoot (sejajar jam)
+bool g_noSessionInfo = false; // true = broker SAMA SEKALI tak punya info sesi (crypto 24/7)
 
 //+------------------------------------------------------------------+
 //| Helper                                                            |
@@ -149,12 +150,28 @@ bool SendPng(string file, string caption)
    if(rc == -1)
    {
       int e = GetLastError();
-      PrintFormat("[ChartShotSender] WebRequest GAGAL (%d). Cek Allow WebRequest & domain. %s",
-                  e, (e == 4014 ? "(tidak aktif di Strategy Tester)" : ""));
+      string tips = "";
+      if(e == 4060 || e == 4014)
+         tips = StringFormat(" -> DOMAIN BELUM DIIZINKAN. MT5: Tools > Options > Expert Advisors > "
+                             "centang 'Allow WebRequest for listed URL' lalu tambahkan: %s", webUrl);
+      else if(e == 5203)
+         tips = " -> request ditolak server (cek URL endpoint)";
+      PrintFormat("[ChartShotSender] WebRequest GAGAL (err %d)%s", e, tips);
       return false;
    }
-   PrintFormat("[ChartShotSender] Terkirim: %d/%d bytes, server: %s",
-               ArraySize(img), (int)sz, CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8));
+   string resp = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+   if(rc != 200)
+   {
+      PrintFormat("[ChartShotSender] SC GAGAL — server balas HTTP %d. Body: %s", rc, resp);
+      PrintFormat("[ChartShotSender]   cek: endpoint %s hidup? key webKey sama dgn SECRET_KEY di send.php?", webUrl);
+      return false;
+   }
+   if(StringFind(resp, "\"ok\":true") < 0)
+   {
+      PrintFormat("[ChartShotSender] SC GAGAL — endpoint balas 200 tapi ok!=true: %s", resp);
+      return false;
+   }
+   PrintFormat("[ChartShotSender] Terkirim ke %s (%d bytes): %s", webChat, (int)sz, resp);
    return true;
 }
 
@@ -200,6 +217,19 @@ int OnInit()
    g_lastShot = 0;
    g_lastCleanup = 0;
    g_lastBoundary = (int)(TimeCurrent() / (everyMinutes * 60)) * (everyMinutes * 60);
+   g_noSessionInfo = DetectNoSessionInfo();
+
+   //--- ringkasan setelan ke jurnal Expert (sekali saat dipasang) -> gampang dicek
+   PrintFormat("[ChartShotSender] START %s %s | tiap %d menit (sejajar :00/:15/:30/:45) | kirim=%s | chat=%s",
+               _Symbol, TfName(), everyMinutes, (webSend ? "WebRequest" : "OFF"), webChat);
+   PrintFormat("[ChartShotSender] endpoint: %s | pasar: %s", webUrl,
+               (g_noSessionInfo ? "24/7 (broker tak punya info sesi = crypto)"
+                                : (IsMarketClosed() ? "TUTUP sekarang (SC di-skip, cleanup ping tetap jalan)"
+                                                    : "BUKA")));
+   if(webSend)
+      PrintFormat("[ChartShotSender] WAJIB sekali saja: Tools > Options > Expert Advisors > Allow WebRequest + tambah %s",
+                  webUrl);
+
    if(shotOnInit)
       TakeShot();
    return INIT_SUCCEEDED;
@@ -250,6 +280,11 @@ void OnTick() {}
 //     jadi tidak pernah dikirim SC-nya.)
 bool IsMarketClosed()
 {
+   // Broker TIDAK punya info sesi utk simbol ini sama sekali (khas CRYPTO: BTCUSD/ETHUSD)
+   // -> anggap 24/7, JANGAN skip SC. (Dulu: Bitcoin kena fallback Sabtu/Minggu = libur,
+   //    padahal pasar crypto jalan -> SC hari Sabtu tidak pernah terkirim.)
+   if(g_noSessionInfo) return false;
+
    MqlDateTime t;
    TimeToStruct(TimeCurrent(), t);
    ENUM_DAY_OF_WEEK dow = (ENUM_DAY_OF_WEEK)t.day_of_week;
@@ -257,6 +292,17 @@ bool IsMarketClosed()
    if(SymbolInfoSessionTrade(_Symbol, dow, 0, from, to)) return false;   // ada sesi hari ini -> BUKA
    if(SymbolInfoSessionTrade(_Symbol, dow, 1, from, to)) return false;   // sesi ke-2
    return (t.day_of_week == 6 || t.day_of_week == 0);                    // fallback: Sabtu/Minggu
+}
+
+//--- true bila broker SAMA SEKALI tidak punya tabel sesi utk simbol ini (crypto 24/7)
+bool DetectNoSessionInfo()
+{
+   datetime f, t;
+   for(int d = 0; d < 7; d++)
+      for(int s = 0; s < 2; s++)
+         if(SymbolInfoSessionTrade(_Symbol, (ENUM_DAY_OF_WEEK)d, s, f, t))
+            return false;      // ada minimal 1 sesi sepekan -> broker punya info sesi
+   return true;                // tak ada info sesi -> simbol 24/7 (crypto)
 }
 
 //--- true saat Sabtu/Minggu (waktu server broker) — hanya dipakai sbg fallback
