@@ -133,46 +133,66 @@ if (strlen($img) > MAX_BYTES) {
 $caption = (string)($data['caption'] ?? '');
 $caption = mb_substr($caption, 0, 1000, 'UTF-8');
 
+// chat boleh berisi BEBERAPA id: "-1001583828319, -1002222222222" (koma / titik-koma / spasi)
+// -> satu POST dari EA bisa dikirim ke beberapa grup sekaligus (fan-out).
 $chat = (string)($data['chat'] ?? '');
-$chatId = ($chat !== '') ? $chat : TG_CHAT_ID;
+$targets = preg_split('/[,;\s]+/', $chat, -1, PREG_SPLIT_NO_EMPTY);
+if (empty($targets)) {
+    $targets = [TG_CHAT_ID];
+}
+$targets = array_slice($targets, 0, 5);   // maks 5 tujuan: jaga respons tetap di bawah webTimeout EA
 
 $tmp = tempnam(sys_get_temp_dir(), 'tgsh_') . '.png';
 file_put_contents($tmp, $img);
 
-$post = [
-    'chat_id' => $chatId,
-    'photo'   => new CURLFile($tmp, 'image/png', 'chart.png'),
-    'protect_content' => true, // anggota tidak bisa screenshot/copy/forward (privacy safety)
-];
-if ($caption !== '') {
-    $post['caption'] = $caption;
-}
+$sent = []; $failed = [];
+foreach ($targets as $chatId) {
+    $post = [
+        'chat_id' => $chatId,
+        'photo'   => new CURLFile($tmp, 'image/png', 'chart.png'),
+        'protect_content' => true, // anggota tidak bisa screenshot/copy/forward (privacy safety)
+    ];
+    if ($caption !== '') {
+        $post['caption'] = $caption;
+    }
 
-$ch = curl_init('https://api.telegram.org/bot' . TG_BOT_TOKEN . '/sendPhoto');
-curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => $post,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 30,
-]);
-$resp = curl_exec($ch);
-$err  = curl_error($ch);
-$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
+    $ch = curl_init('https://api.telegram.org/bot' . TG_BOT_TOKEN . '/sendPhoto');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $post,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $resp = curl_exec($ch);
+    $err  = curl_error($ch);
+    curl_close($ch);
+
+    if ($resp === false) {
+        $failed[] = $chatId . ' (curl: ' . $err . ')';
+        continue;
+    }
+    $r = json_decode($resp, true);
+    if (($r['ok'] ?? false) !== true) {
+        $failed[] = $chatId . ' (' . ($r['description'] ?? 'gagal') . ')';
+        continue;
+    }
+    // Simpan chat_id|message_id|ts per tujuan — dipakai cleanup weekend
+    if (!empty($r['result']['message_id'])) {
+        $line = $chatId . '|' . (int)$r['result']['message_id'] . '|' . time() . PHP_EOL;
+        @file_put_contents(LOG_FILE, $line, FILE_APPEND | LOCK_EX);
+    }
+    $sent[] = $chatId;
+}
 @unlink($tmp);
 
-if ($resp === false) {
-    respond(502, 'Gagal hubungi Telegram: ' . $err);
-}
-$r = json_decode($resp, true);
-if (($r['ok'] ?? false) !== true) {
-    respond(502, 'Telegram menolak: ' . ($r['description'] ?? $resp));
+if (empty($sent)) {
+    respond(502, 'Telegram menolak semua tujuan: ' . implode('; ', $failed));
 }
 
-// Simpan chat_id|message_id|ts — dipakai cleanup weekend
-if (!empty($r['result']['message_id'])) {
-    $line = $chatId . '|' . (int)$r['result']['message_id'] . '|' . time() . PHP_EOL;
-    @file_put_contents(LOG_FILE, $line, FILE_APPEND | LOCK_EX);
-}
-
-respond(200, 'Terkirim ke Telegram', ['tg_code' => $code, 'chat' => $chatId]);
+respond(200, 'Terkirim ke Telegram', [
+    'tg_code' => 200,
+    'chat'    => implode(',', $sent),
+    'sent'    => count($sent),
+    'failed'  => count($failed),
+    'detail'  => $failed,
+]);
