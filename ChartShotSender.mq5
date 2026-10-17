@@ -9,7 +9,7 @@
 //|   - Upload tg_shot/send.php ke hosting, set $SECRET & token bot  |
 //+------------------------------------------------------------------+
 #property copyright "Ndes"
-#property version   "1.03"
+#property version   "1.04"
 #property description "Screenshot chart -> Telegram tiap N menit via endpoint PHP."
 
 input int    everyMinutes = 15;     // Interval screenshot (menit)
@@ -72,7 +72,7 @@ void UpdateInfoLabel()
       ObjectSetString(0, c_label, OBJPROP_FONT, "Arial");
       ObjectSetInteger(0, c_label, OBJPROP_FONTSIZE, 11);
    }
-   MqlDateTime st; TimeToStruct(TimeCurrent(), st);
+   MqlDateTime st; TimeToStruct(TimeTradeServer(), st);
    ObjectSetString(0, c_label, OBJPROP_TEXT,
       StringFormat("%s %s | %s GMT | SVR %02d:%02d", _Symbol, TfName(),
                    WorldTimeStr(), st.hour, st.min));
@@ -183,10 +183,15 @@ string ShotAutoName()
    return StringFormat("chart_%s_%s.png", sym, TfName());
 }
 
-void TakeShot()
+void TakeShot(datetime bTime = 0)
 {
    if(showInfo)
       UpdateInfoLabel();
+
+   // bTime = waktu BOUNDARY (:00/:15/:30/:45) supaya label waktu di gambar sama
+   // persis dengan jadwalnya, bukan waktu proses yg bisa geser beberapa detik.
+   if(bTime <= 0)
+      bTime = TimeTradeServer();
 
    string fn = (StringLen(shotFilename) > 0 ? shotFilename : ShotAutoName());
    // refresh chart dulu biar gambar terbaru
@@ -201,7 +206,7 @@ void TakeShot()
    PrintFormat("[ChartShotSender] Screenshot OK -> MQL5\\Files\\%s", fn);
    if(webSend)
    {
-      MqlDateTime cst; TimeToStruct(TimeCurrent(), cst);
+      MqlDateTime cst; TimeToStruct(bTime, cst);
       string caption = StringFormat("%s %s | %s GMT | SVR %02d:%02d", _Symbol, TfName(),
                                     WorldTimeStr(), cst.hour, cst.min);
       SendPng(fn, caption);
@@ -213,10 +218,11 @@ void TakeShot()
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   EventSetTimer(60);
+   // Timer 500 ms: cek boundary dg presisi sub-detik (dulu 60 dtk -> SC bisa telat 1 menit)
+   EventSetMillisecondTimer(500);
    g_lastShot = 0;
    g_lastCleanup = 0;
-   g_lastBoundary = (int)(TimeCurrent() / (everyMinutes * 60)) * (everyMinutes * 60);
+   g_lastBoundary = (int)(TimeTradeServer() / (everyMinutes * 60)) * (everyMinutes * 60);
    g_noSessionInfo = DetectNoSessionInfo();
 
    //--- ringkasan setelan ke jurnal Expert (sekali saat dipasang) -> gampang dicek
@@ -244,7 +250,14 @@ void OnDeinit(const int reason)
 
 void OnTimer()
 {
-   datetime now = TimeCurrent();
+   // TimeTradeServer() = jam server terminal, UPDATE TIAP DETIK tanpa perlu tick
+   // (TimeCurrent() = waktu tick terakhir -> bisa macet di simbol sepi & bikin telat)
+   datetime now = TimeTradeServer();
+
+   // label jam di chart ikut hidup (dulu hanya berubah tiap SC -> kelihatan beku)
+   static datetime s_lastLbl = 0;
+   if(showInfo && now != s_lastLbl) { s_lastLbl = now; UpdateInfoLabel(); }
+
    if(!ignoreMarketClose && IsMarketClosed())
    {
       // Pasar tutup MENURUT BROKER (XAUUSD/forex weekend; BTC biasanya buka):
@@ -260,15 +273,25 @@ void OnTimer()
       g_lastShot = (int)now; // jangan screenshot selama libur
       return;
    }
-   // Kirim SELARAS JAM: boundary = kelipatan 15 menit dari jam server (:00, :15, :30, :45).
-   // pindah boundary terakhir, baru shoot — mencegah dobel di tick yang sama.
-   int step = everyMinutes * 60;
-   int boundary = (int)(now / step) * step;
+   // Kirim SELARAS JAM: boundary = kelipatan 15 menit jam server (:00, :15, :30, :45).
+   // Timer 500 ms -> SC berangkat maksimal ~0,5 dtk setelah boundary (dulu timer 60 dtk
+   // -> bisa telat sampai 1 menit, gambar jadi tidak cocok dgn jam yg dibaca anggota).
+   int step      = everyMinutes * 60;
+   int boundary  = (int)(now / step) * step;
    if(boundary != g_lastBoundary && now >= boundary)
    {
-      TakeShot();
+      double late = (double)(now - boundary);
+      if(late <= (double)step)      // masih di boundary ini -> kirim
+      {
+         PrintFormat("[ChartShotSender] Boundary %s -> shot telat %.1f dtk",
+                     TimeToString((datetime)boundary, TIME_MINUTES), late);
+         TakeShot((datetime)boundary);
+         g_lastShot = (int)now;
+      }
+      else
+         PrintFormat("[ChartShotSender] Boundary %s terlewat %.0f dtk (PC tidur/offline) — dilewati, tidak kirim data basi",
+                     TimeToString((datetime)boundary, TIME_MINUTES), late);
       g_lastBoundary = boundary;
-      g_lastShot = (int)now;
    }
 }
 
@@ -286,7 +309,7 @@ bool IsMarketClosed()
    if(g_noSessionInfo) return false;
 
    MqlDateTime t;
-   TimeToStruct(TimeCurrent(), t);
+   TimeToStruct(TimeTradeServer(), t);
    ENUM_DAY_OF_WEEK dow = (ENUM_DAY_OF_WEEK)t.day_of_week;
    datetime from, to;
    if(SymbolInfoSessionTrade(_Symbol, dow, 0, from, to)) return false;   // ada sesi hari ini -> BUKA
@@ -309,7 +332,7 @@ bool DetectNoSessionInfo()
 bool IsWeekend()
 {
    MqlDateTime t;
-   TimeToStruct(TimeCurrent(), t);
+   TimeToStruct(TimeTradeServer(), t);
    return (t.day_of_week == 6 || t.day_of_week == 0);
 }
 
