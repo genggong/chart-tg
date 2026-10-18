@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<title>Panduan — Panel Web & SC Telegram di palasanga.site</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  body { font-family: 'DejaVu Sans', Arial, sans-serif; color:#16202c; font-size:11.5pt; line-height:1.55; }
+  h1 { font-size:19pt; margin:0 0 2px; color:#0b3d91; }
+  .sub { color:#5a6b7c; font-size:10.5pt; margin-bottom:16px; }
+  h2 { font-size:13.5pt; margin:20px 0 6px; padding:6px 10px; background:#0b3d91; color:#fff; border-radius:5px; }
+  h3 { font-size:11.5pt; margin:14px 0 4px; color:#0b3d91; }
+  .card { border:1px solid #d7dee7; border-radius:7px; padding:11px 13px; margin:10px 0; background:#fbfcfe; }
+  .ok { border-left:5px solid #1a9e57; background:#f2fbf6; }
+  .warn { border-left:5px solid #d98324; background:#fff8ef; }
+  .bad { border-left:5px solid #cf3a3a; background:#fff4f4; }
+  code, .mono { font-family:'DejaVu Sans Mono', monospace; font-size:9.7pt; }
+  pre { background:#101a26; color:#d8e6f2; padding:9px 11px; border-radius:6px; white-space:pre-wrap; word-break:break-all; font-size:9.4pt; }
+  table { border-collapse:collapse; width:100%; margin:8px 0; font-size:10.3pt; }
+  th, td { border:1px solid #ccd6e0; padding:5px 7px; text-align:left; vertical-align:top; }
+  th { background:#eef3f9; }
+  .step { font-weight:bold; color:#0b3d91; }
+  ul { margin:5px 0 5px 18px; } li { margin:2px 0; }
+  .red { color:#cf3a3a; font-weight:bold; }
+  .sketch { border:1px solid #c9d3de; border-radius:7px; padding:8px; margin:10px 0; background:#fff; }
+  .small { font-size:9.8pt; color:#5a6b7c; }
+</style></head><body>
+
+<h1>Panduan Lengkap — Panel Web + SC Telegram di <span class="mono">palasanga.site</span></h1>
+<div class="sub">Untuk Om Eazy · dibuat 18 Okt 2026 · semua langkah sudah diuji dari sisi server</div>
+
+<div class="card ok">
+<b>SUDAH BERES (terverifikasi, tidak perlu diulang):</b>
+<ul>
+<li>Halaman panel live: <span class="mono">https://palasanga.site/vantera/</span> — HTTP 200, tampil mode kartu HP + 4 tab</li>
+<li>Endpoint data: <span class="mono">https://palasanga.site/vantera/panel_data.php</span> — token uji <b>ditolak</b> saat salah, <b>diterima</b> saat benar</li>
+<li>Berkas sensitif (`OptimusPanel.mq5`, `README.md`, dll) sudah <b>terkunci (403)</b> — source indikator tidak bisa diunduh orang lain</li>
+</ul>
+</div>
+
+<h2>Bagian 1 — Pindahkan pengirim SC ke palasanga (5 langkah, ±5 menit)</h2>
+
+<div class="card bad">
+<b>Penting dulu — token bot lama sudah bocor.</b> Repo <span class="mono">genggong/chart-tg</span> ternyata <b>publik</b>, dan di dalamnya ada <span class="mono">send.php</span> berisi token bot <b>@Kingatasolutionsbot</b>. Siapa pun bisa memakai token itu untuk mengirim pesan ke grup/channel Anda. <b>Wajib revoke dulu.</b>
+</div>
+
+<h3>Langkah 1 — Revoke token bot (BotFather)</h3>
+<ol>
+<li>Buka chat dengan <b>@BotFather</b> → ketik <span class="mono">/revoke</span></li>
+<li>Pilih bot <b>@Kingatasolutionsbot</b></li>
+<li>BotFather mengirim <b>token baru</b> (format <span class="mono">123456789:AA...</span>) — simpan, kita pakai di Langkah 3</li>
+</ol>
+<div class="sketch">
+<svg width="100%" height="86" viewBox="0 0 520 86">
+  <rect x="4" y="4" width="512" height="78" rx="7" fill="#f7f9fc" stroke="#c9d3de"/>
+  <rect x="14" y="14" width="150" height="20" rx="4" fill="#0b3d91"/><text x="22" y="28" fill="#fff" font-size="11">Telegram — BotFather</text>
+  <text x="18" y="52" font-size="11" font-family="monospace">/revoke</text>
+  <text x="18" y="68" font-size="10" fill="#5a6b7c">pilih @Kingatasolutionsbot → salin token baru</text>
+  <path d="M300 40 L360 40" stroke="#cf3a3a" stroke-width="2.5"/><path d="M352 34 L362 40 L352 46" fill="#cf3a3a"/>
+  <text x="372" y="44" font-size="10" fill="#cf3a3a" font-weight="bold">token baru → Langkah 3</text>
+</svg>
+</div>
+
+<h3>Langkah 2 — Buat folder endpoint di hosting</h3>
+<p>Buka <b>DirectAdmin → Terminal</b> (atau SSH), jalankan:</p>
+<pre>mkdir -p ~/domains/palasanga.site/public_html/tg_shot &amp;&amp; ls -la ~/domains/palasanga.site/public_html/</pre>
+
+<h3>Langkah 3 — Unggah <span class="mono">send.php</span> + tempel token baru</h3>
+<ol>
+<li>File Manager → masuk <span class="mono">domains/palasanga.site/public_html/tg_shot</span> → <b>Upload</b> file <span class="mono">send.php</span> (saya kirim terpisah)</li>
+<li>Klik kanan <span class="mono">send.php</span> → <b>Edit</b>, cari <b>baris 14</b>:
+<pre>const TG_BOT_TOKEN = 'TEMPEL-TOKEN-BARU-DARI-BOTFATHER';</pre></li>
+<li>Ganti dengan token dari Langkah 1 → <b>Save</b>. Baris <span class="mono">SECRET_KEY</span> (baris 16) <b>jangan diubah</b> — sudah saya samakan dengan EA:
+<pre>const SECRET_KEY = 'PAL2f01487bf0cdec19040bde';</pre></li>
+</ol>
+
+<h3>Langkah 4 — Uji endpoint hidup</h3>
+<pre>curl -s "https://palasanga.site/tg_shot/send.php?key=PAL2f01487bf0cdec19040bde"</pre>
+<p>Yang benar: balasan JSON (bukan halaman error). Kalau muncul <span class="mono">key salah</span> → SECRET_KEY tidak sama dengan di atas. Kalau <span class="mono">500</span> → token belum benar di baris 14.</p>
+
+<h3>Langkah 5 — Uji kirim foto ke grup</h3>
+<p>Bilang ke saya <b>"endpoint siap"</b> → saya kirim foto uji langsung dari server saya ke grup <b>Vantera Trading Konsultan</b>. Kalau foto muncul di grup, endpoint sudah benar 100% dan tidak perlu diapa-apakan lagi.</p>
+
+<h2>Bagian 2 — MT5: ChartShotSender (SC otomatis ke grup)</h2>
+<table>
+<tr><th>Berkas</th><th>Ditaruh di</th></tr>
+<tr><td><span class="mono">ChartShotSender.mq5</span> (v1.05)</td><td><span class="mono">MQL5\Experts\</span></td></tr>
+</table>
+<ol>
+<li>MT5 → <b>File → Open Data Folder</b> → buka <span class="mono">MQL5\Experts</span> → tempel <span class="mono">ChartShotSender.mq5</span></li>
+<li><b>F4</b> (MetaEditor) → buka file itu → <b>F7</b> compile → lihat tab <b>Errors</b> harus <b>0 error, 0 warning</b></li>
+<li>Kembali ke MT5 → <b>Ctrl+N</b> → <b>Expert Advisors</b> → seret <b>ChartShotSender</b> ke <b>chart M15 yang sama</b> dengan panel OptimusPanel</li>
+<li>Di jendela Inputs, isi (nilai ini sudah jadi default di v1.05, cek saja):
+<table>
+<tr><th>Input</th><th>Nilai</th><th>Arti</th></tr>
+<tr><td class="mono">everyMinutes</td><td>15</td><td>SC tiap 15 menit di boundary :00/:15/:30/:45</td></tr>
+<tr><td class="mono">webUrl</td><td class="mono">https://palasanga.site/tg_shot/send.php</td><td>endpoint baru (palasanga)</td></tr>
+<tr><td class="mono">webKey</td><td class="mono">PAL2f01487bf0cdec19040bde</td><td>harus sama dengan SECRET_KEY di send.php</td></tr>
+<tr><td class="mono">webChat</td><td class="mono">-1001583828319</td><td>grup Vantera Trading Konsultan</td></tr>
+<tr><td class="mono">shotWidth / shotHeight</td><td>1920 / 1080</td><td>biar 30 kolom panel + blok RPS/Market Info tidak terpotong</td></tr>
+<tr><td class="mono">ignoreMarketClose</td><td>false</td><td>weekend tidak kirim SC (kecuali simbol crypto)</td></tr>
+</table></li>
+<li>Buka <b>Tools → Options → Expert Advisors</b> → centang <b>Allow WebRequest for listed URL</b> → <b>Add</b>:
+<pre>https://palasanga.site/tg_shot/send.php</pre>
+<span class="red">Kalau langkah ini dilewat, jurnal menulis error 4060 dan SC tidak terkirim.</span></li>
+<li>Cek jurnal tab <b>Experts</b>, harus muncul: <span class="mono">[ChartShotSender] Terkirim ke -1001583828319 (...)</span></li>
+</ol>
+<div class="sketch">
+<svg width="100%" height="150" viewBox="0 0 520 150">
+  <rect x="4" y="4" width="512" height="142" rx="7" fill="#f7f9fc" stroke="#c9d3de"/>
+  <text x="16" y="24" font-size="11" font-weight="bold" fill="#0b3d91">Tools → Options → Expert Advisors</text>
+  <rect x="16" y="34" width="230" height="18" rx="3" fill="#fff" stroke="#c9d3de"/><text x="22" y="47" font-size="10">☑ Allow WebRequest for listed URL:</text>
+  <rect x="26" y="58" width="330" height="20" rx="3" fill="#fff" stroke="#cf3a3a" stroke-width="1.6"/>
+  <text x="34" y="72" font-size="10" font-family="monospace">https://palasanga.site/tg_shot/send.php</text>
+  <rect x="366" y="58" width="52" height="20" rx="3" fill="#eef3f9" stroke="#9fb0c2"/><text x="378" y="72" font-size="10">Add</text>
+  <text x="26" y="98" font-size="10" fill="#5a6b7c">Daftar ini per-URL. Tambahkan juga milik panel:</text>
+  <text x="34" y="114" font-size="10" font-family="monospace" fill="#0b3d91">https://palasanga.site/vantera/panel_data.php</text>
+  <text x="26" y="134" font-size="10" fill="#cf3a3a" font-weight="bold">Tanpa ini: error 4060, tidak ada data/SC terkirim</text>
+</svg>
+</div>
+
+<h2>Bagian 3 — MT5: OptimusPanel v1.16 (data → halaman web)</h2>
+<ol>
+<li>Panel <b>OptimusPanel v1.16</b> sudah ter-compile (0 error) — tempel ke chart M15 yang sama</li>
+<li>Inputs → grup <span class="mono">=== Web Push ===</span>:
+<table>
+<tr><th>Input</th><th>Nilai</th></tr>
+<tr><td class="mono">webAktif</td><td>true</td></tr>
+<tr><td class="mono">webUrl</td><td class="mono">https://palasanga.site/vantera/panel_data.php</td></tr>
+<tr><td class="mono">webToken</td><td class="mono">2cac8817e40cba68aaaaabe0</td></tr>
+</table></li>
+<li>Pastikan URL panel juga ada di <b>Allow WebRequest</b> (Bagian 2 langkah 5)</li>
+<li>Jurnal <b>Experts</b> harus menulis <span class="mono">[WebPush] OK #1: ... byte</span> → buka <span class="mono">https://palasanga.site/vantera/</span>, status berubah jadi <b>segar</b> beberapa detik dan data contoh tergantikan data asli</li>
+</ol>
+
+<h2>Bagian 4 — Kalau ada masalah (lihat gejalanya)</h2>
+<table>
+<tr><th>Gejala</th><th>Penyebab</th><th>Perbaikan</th></tr>
+<tr><td>Jurnal: <span class="mono">error 4060</span></td><td>URL belum didaftarkan</td><td>Tools → Options → Expert Advisors → Add URL (persis, termasuk <span class="mono">https://</span>)</td></tr>
+<tr><td>Endpoint jawab <span class="mono">"token salah"</span></td><td><span class="mono">webToken</span> ≠ <span class="mono">$TOKEN</span></td><td>Samakan keduanya (panel_data.php baris 15 ↔ input MT5)</td></tr>
+<tr><td>Endpoint jawab <span class="mono">"key salah"</span></td><td><span class="mono">webKey</span> ≠ <span class="mono">SECRET_KEY</span></td><td>Samakan dengan <span class="mono">PAL2f01487bf0cdec19040bde</span></td></tr>
+<tr><td>SC tidak muncul di grup</td><td>bot belum jadi anggota / bukan admin grup</td><td>Tambahkan <b>@Kingatasolutionsbot</b> ke grup, jadikan <b>admin</b> (izin kirim media)</td></tr>
+<tr><td>SC tidak muncul (weekend)</td><td>pasar tutup, gate sesi aktif</td><td>normal — atau set <span class="mono">ignoreMarketClose=true</span> untuk simbol 24/7</td></tr>
+<tr><td>Halaman panel kosong / banyak <span class="mono">--</span></td><td>belum ada data dari MT5</td><td>Tunggu bar baru (panel kirim per bar); cek jurnal Experts</td></tr>
+<tr><td>Tulisan panel terpotong di SC</td><td>lebar gambar kecil</td><td><span class="mono">shotWidth=1920, shotHeight=1080</span> (sudah default v1.05)</td></tr>
+</table>
+
+<h2>Ringkasan alamat & kunci</h2>
+<table>
+<tr><th>Keperluan</th><th>Nilai</th></tr>
+<tr><td>Halaman panel (dibagikan ke grup)</td><td class="mono">https://palasanga.site/vantera/</td></tr>
+<tr><td>Endpoint data panel (webUrl)</td><td class="mono">https://palasanga.site/vantera/panel_data.php</td></tr>
+<tr><td>Token panel (webToken)</td><td class="mono">2cac8817e40cba68aaaaabe0</td></tr>
+<tr><td>Endpoint SC (webUrl EA)</td><td class="mono">https://palasanga.site/tg_shot/send.php</td></tr>
+<tr><td>Kunci SC (webKey)</td><td class="mono">PAL2f01487bf0cdec19040bde</td></tr>
+<tr><td>Grup tujuan SC (webChat)</td><td class="mono">-1001583828319</td></tr>
+</table>
+<p class="small">Catatan: token panel &amp; kunci SC adalah rahasia bersama — kalau nanti bocor, tinggal minta saya buatkan yang baru (ubah di 2 tempat: berkas PHP + input MT5).</p>
+
+</body></html>

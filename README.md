@@ -55,3 +55,8 @@ curl -s -o /dev/null -w "%{http_code}\n" https://vapekongstore.com/tg_shot/send.
 - Ganti interval: input `everyMinutes` di EA
 - Ganti tujuan: parameter `webChat` di EA (berisi chat_id) atau edit `TG_CHAT_ID` di send.php
 - Ganti bot: edit `TG_BOT_TOKEN` di send.php
+## Versi terbaru (18 Okt 2026)
+
+- **ChartShotSender v1.05** — default endpoint pindah ke `https://palasanga.site/tg_shot/send.php`, ukuran SC 1920×1080 (panel v1.16 ada 30 kolom + blok RPS/Market Info). Compile terverifikasi: 0 error, 0 warning.
+- **send.php** — token bot TIDAK lagi disimpan di berkas ini (repo publik). Isi token lewat environment `TG_BOT_TOKEN` atau edit baris konstanta saat menempel di hosting.
+- Panduan lengkap: `PANDUAN_Hosting_Palasanga.pdf` (di dalam `paket-palasanga.zip`).

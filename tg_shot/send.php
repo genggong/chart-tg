@@ -11,7 +11,7 @@ ini_set('display_errors', '0');
 header('Content-Type: application/json; charset=utf-8');
 
 /* ============ KONFIGURASI ============ */
-const TG_BOT_TOKEN = '6703128222:AAEubiC-f_ovvZqZFc-Qj8lTMWNdXJRnHR8';
+const TG_BOT_TOKEN = getenv('TG_BOT_TOKEN') ?: 'TEMPEL-TOKEN-BOTFATHER';
 const TG_CHAT_ID   = '-1002068767074';            // channel Kingatasolutions
 const SECRET_KEY   = 'KGSd2825161d5eacbae1ef6beb8'; // sama dengan webKey di EA
 const MAX_BYTES    = 8 * 1024 * 1024;              // 8 MB

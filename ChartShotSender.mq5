@@ -9,19 +9,19 @@
 //|   - Upload tg_shot/send.php ke hosting, set $SECRET & token bot  |
 //+------------------------------------------------------------------+
 #property copyright "Ndes"
-#property version   "1.04"
+#property version   "1.05"
 #property description "Screenshot chart -> Telegram tiap N menit via endpoint PHP."
 
 input int    everyMinutes = 15;     // Interval screenshot (menit)
 input string shotFilename = "";     // Kosong = auto "chart_<SYMBOL>_<TF>.png" (unik per pair)
-input int    shotWidth    = 1280;   // Lebar gambar px
-input int    shotHeight   = 720;    // Tinggi gambar px
+input int    shotWidth    = 1920;   // Lebar gambar px
+input int    shotHeight   = 1080;    // Tinggi gambar px
 input bool   shotOnInit   = true;   // Screenshot langsung saat dipasang
 input bool   showInfo     = true;   // Label info simbol & waktu di gambar
 input bool   ignoreMarketClose = false; // true = tetap kirim SC walau broker bilang pasar tutup (crypto yg tak punya info sesi)
 input bool   webSend      = true;   // Kirim via WebRequest
-input string webUrl       = "https://vapekongstore.com/tg_shot/send.php";
-input string webKey       = "KGSd2825161d5eacbae1ef6beb8"; // Secret send.php
+input string webUrl       = "https://palasanga.site/tg_shot/send.php";
+input string webKey       = "PAL2f01487bf0cdec19040bde"; // Secret send.php
 input string webChat      = "-1001583828319"; // Group default: kirim lgsg ke group tanpa isi parameter
 input int    webTimeout   = 10000;  // ms
 
