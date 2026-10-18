@@ -21,7 +21,7 @@ input bool   showInfo     = true;   // Label info simbol & waktu di gambar
 input bool   ignoreMarketClose = false; // true = tetap kirim SC walau broker bilang pasar tutup (crypto yg tak punya info sesi)
 input bool   webSend      = true;   // Kirim via WebRequest
 input string webUrl       = "https://vapekongstore.com/tg_shot/send.php";
-input string webKey       = "KGSd2825161d5eacbae1ef6beb8"; // Secret send.php
+input string webKey       = "TEMPEL-SECRET-KEY"; // Secret send.php
 input string webChat      = "-1001583828319"; // Group default: kirim lgsg ke group tanpa isi parameter
 input int    webTimeout   = 10000;  // ms
 

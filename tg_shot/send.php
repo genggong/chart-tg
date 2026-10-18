@@ -4,7 +4,7 @@
  * (WebRequest POST JSON: {key, chat, caption, img(base64)}) lalu kirim ke Telegram.
  *
  * KONFIGURASI SUDAH TERISI: token bot Kingatasolutions, chat_id channel -1002068767074,
- * secret key KGSd2825161d5eacbae1ef6beb8 (harus sama dengan webKey di EA).
+ * secret key TEMPEL-SECRET-KEY (harus sama dengan webKey di EA).
  */
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
