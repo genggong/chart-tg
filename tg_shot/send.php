@@ -13,7 +13,7 @@ header('Content-Type: application/json; charset=utf-8');
 /* ============ KONFIGURASI ============ */
 const TG_BOT_TOKEN = getenv('TG_BOT_TOKEN') ?: 'TEMPEL-TOKEN-BOTFATHER';
 const TG_CHAT_ID   = '-1002068767074';            // channel Kingatasolutions
-const SECRET_KEY   = 'KGSd2825161d5eacbae1ef6beb8'; // sama dengan webKey di EA
+const SECRET_KEY   = getenv('TG_SHOT_KEY') ?: 'TEMPEL-SECRET-KEY'; // sama dengan webKey di EA
 const MAX_BYTES    = 8 * 1024 * 1024;              // 8 MB
 const LOG_FILE     = __DIR__ . '/sent.log';
 /* ==================================== */
